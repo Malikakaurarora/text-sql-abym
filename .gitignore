@@ -3,3 +3,6 @@ library.db
 __pycache__/
 *.pyc
 .claude/
+app/agent.py
+app/flask_app.py
+app/streamlit_app.py
