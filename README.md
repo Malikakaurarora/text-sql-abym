@@ -130,6 +130,17 @@ attaching screenshots:
 ## Security
 
 - Only `SELECT` queries are allowed through the chatbot
-- Dangerous SQL keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) are blocked at both input and query level
+- Dangerous SQL keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) are blocked at both input and query level these can be done only on admin level for that i have another panel on teh ui 
 - Admin Panel uses parameterized queries to prevent SQL injection
 - User input is validated before being sent to the LLM
+
+
+Stage 2 — Admin Panel
+A separate Admin Panel was added for librarians to manage data directly — returning books, updating stock, adding new books and members, and resolving stock alerts — all through a simple UI without writing any SQL.
+<img width="1577" height="870" alt="image" src="https://github.com/user-attachments/assets/08a1cc4f-8656-471e-ac8b-c88e78c1da99" />
+
+Challenges Faced
+Groq API access was denied during development, so Ollama was used as a free local alternative
+Local LLM (Ollama) runs on CPU which results in slower response times (30–60 seconds per query) compared to cloud-based APIs
+Ensuring the LLM generates correct SQL required providing detailed schema context and example queries in the prompt
+Manager ko share karo — link bhi paste kar dena GitHub ka uske baad!
