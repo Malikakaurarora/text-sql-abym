@@ -1,7 +1,4 @@
-flask
 streamlit
-langchain
-langchain-community
-langchain-groq
-sqlalchemy
+langchain-ollama
+langchain-core
 python-dotenv
