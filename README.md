@@ -106,6 +106,12 @@ Displays the answer to the user
 
 Key feature: `vw_stock_alert_trigger` VIEW automatically calculates the expected restock arrival date based on the supplier visit schedule and lead time days — demonstrating a cross-table dependency.
 
+
+attaching screenshots:
+<img width="1918" height="878" alt="image" src="https://github.com/user-attachments/assets/dee264da-8617-4bd4-a182-680e3d0c0682" />
+
+<img width="1240" height="871" alt="image" src="https://github.com/user-attachments/assets/b8497917-4fe0-4fd7-a20f-7b33314f48f4" />
+
 ## Security
 
 - Only `SELECT` queries are allowed to run against the database
