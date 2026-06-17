@@ -4,9 +4,18 @@ import os
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'library.db')
 
 def create_database():
+    # Fix 11 — Safety check before overwriting
+    if os.path.exists(DB_PATH):
+        confirm = input("Database already exists! Overwrite? (yes/no): ")
+        if confirm.strip().lower() != "yes":
+            print("Cancelled. Existing database kept.")
+            return
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.executescript("""
+        PRAGMA foreign_keys = ON;
+
         DROP TABLE IF EXISTS Issue_Record;
         DROP TABLE IF EXISTS Stock_Alert;
         DROP TABLE IF EXISTS Book;
@@ -108,13 +117,12 @@ def create_database():
         WHERE b.available_copies <= b.reorder_threshold
         ORDER BY expected_arrival ASC;
 
-        -- Sample Data
         INSERT INTO Supplier (name, contact_person, phone, email, address) VALUES
         ('PaperBridge Distributors', 'Raj Mehta',    '555-1001', 'raj@paperbridge.com',  '12 Nehru Road, Delhi'),
-        ('BookSource India',          'Priya Sharma', '555-1002', 'priya@booksource.com', '45 MG Road, Bangalore'),
-        ('EduSupply Co.',             'Amit Verma',   '555-1003', 'amit@edusupply.com',   '7 Park Street, Kolkata'),
-        ('GlobalReads Ltd.',          'Sara Khan',    '555-1004', 'sara@globalreads.com', '22 Anna Salai, Chennai'),
-        ('PrintWorld',                'Vikram Singh', '555-1005', 'vikram@printworld.com','9 FC Road, Pune');
+        ('BookSource India',         'Priya Sharma', '555-1002', 'priya@booksource.com', '45 MG Road, Bangalore'),
+        ('EduSupply Co.',            'Amit Verma',   '555-1003', 'amit@edusupply.com',   '7 Park Street, Kolkata'),
+        ('GlobalReads Ltd.',         'Sara Khan',    '555-1004', 'sara@globalreads.com', '22 Anna Salai, Chennai'),
+        ('PrintWorld',               'Vikram Singh', '555-1005', 'vikram@printworld.com','9 FC Road, Pune');
 
         INSERT INTO Publication (title, category, publisher_name, language) VALUES
         ('Modern Fiction Series',    'Fiction',    'Penguin Books',  'English'),
