@@ -61,10 +61,14 @@ with tab1:
     if len(st.session_state.messages) > MAX_MESSAGES:
         st.session_state.messages = st.session_state.messages[-MAX_MESSAGES:]
 
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # Scrollable chat history
+    chat_box = st.container()
+    with chat_box:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
+    # Example buttons
     examples = [
         "Show all books with low stock",
         "Which books are currently borrowed?",
@@ -78,10 +82,11 @@ with tab1:
         if cols[i].button(example, key=f"ex_{i}", use_container_width=True):
             st.session_state.prefill = example
 
+    # Input always below chat box
     prefill = st.session_state.pop("prefill", "")
     with st.form("chat_form", clear_on_submit=True):
-        user_input = st.text_input("Type your question here...", value=prefill)
-        submitted = st.form_submit_button("Ask")
+        user_input = st.text_input("Type your question here...", value=prefill, label_visibility="collapsed", placeholder="Ask anything about the library...")
+        submitted = st.form_submit_button("Ask", use_container_width=True)
     question = user_input if submitted else None
 
     if question:
@@ -90,15 +95,16 @@ with tab1:
             st.warning(error_msg)
         else:
             st.session_state.messages.append({"role": "user", "content": question})
-            with st.chat_message("user"):
-                st.markdown(question)
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking... (may take 30-60 seconds)"):
-                    try:
-                        answer = ask(question)
-                    except Exception as e:
-                        answer = f"Error: {str(e)}"
-                st.markdown(answer)
+            with chat_box:
+                with st.chat_message("user"):
+                    st.markdown(question)
+                with st.chat_message("assistant"):
+                    with st.spinner("Thinking... (may take 1-3 minutes on CPU)"):
+                        try:
+                            answer = ask(question)
+                        except Exception as e:
+                            answer = f"Error: {str(e)}"
+                    st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
 
 # ══════════════════════════════════════════════════════════════
