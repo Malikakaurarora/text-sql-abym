@@ -1,6 +1,6 @@
 # Library Management System — NL to SQL Chatbot
 
-A Natural Language to SQL chatbot built on a Library Management System database. Ask questions in plain English and get answers from a real SQLite database — no SQL knowledge required.
+A two-stage Library Management System featuring a Natural Language to SQL chatbot and a full Admin Panel — built entirely with free, local tools.
 
 ## Tech Stack
 
@@ -30,12 +30,28 @@ text-sql/
 ├── app/
 │   ├── create_db.py       # Creates SQLite database with all tables and sample data
 │   ├── agent.py           # NL to SQL logic — LLM generates SQL, runs on DB, returns answer
-│   └── streamlit_app.py   # Chatbot UI (browser-based)
+│   ├── admin.py           # Admin CRUD operations (return book, update stock, add records)
+│   └── streamlit_app.py   # Two-tab UI: Chatbot + Admin Panel
 ├── library_schema.sql     # Full DB schema with VIEW definition
 ├── sample_data.sql        # Sample data (5 rows per table)
 ├── requirements.txt       # Python dependencies
 └── README.md
 ```
+
+## Features
+
+### Stage 1 — NL to SQL Chatbot
+- Ask questions in plain English
+- LLM converts question to SQL automatically
+- Answers pulled directly from SQLite database
+- Only SELECT queries allowed (read-only, secure)
+
+### Stage 2 — Admin Panel
+- Return a borrowed book (auto-updates stock)
+- Update available copies for any book
+- Add new books to the database
+- Register new members
+- Resolve stock alerts
 
 ## Setup & Run
 
@@ -66,7 +82,7 @@ python app/create_db.py
 ollama serve
 ```
 
-### Step 5 — Run the Chatbot UI
+### Step 5 — Run the App
 
 ```bash
 python -m streamlit run app/streamlit_app.py
@@ -74,7 +90,7 @@ python -m streamlit run app/streamlit_app.py
 
 Open browser at: `http://localhost:8501`
 
-## Sample Questions to Try
+## Sample Chatbot Questions
 
 - `Show all books with low stock`
 - `Which books are currently borrowed?`
@@ -88,23 +104,22 @@ Open browser at: `http://localhost:8501`
 User Question (English)
         ↓
 LLM (Ollama / Llama 3.2)
-Converts question to SQL query
+Converts question to SQL
         ↓
 SQLite Database (library.db)
-Executes the SQL query
+Executes the SQL
         ↓
 LLM again
-Converts result to a human-friendly answer
+Converts result to human-friendly answer
         ↓
-Streamlit UI
-Displays the answer to the user
+Streamlit UI displays the answer
 ```
 
 ## Database Schema
 
 8 tables: `Supplier`, `Publication`, `Supplier_Publication`, `Supplier_Visit_Schedule`, `Book`, `Stock_Alert`, `Member`, `Issue_Record`
 
-Key feature: `vw_stock_alert_trigger` VIEW automatically calculates the expected restock arrival date based on the supplier visit schedule and lead time days — demonstrating a cross-table dependency.
+Key feature: `vw_stock_alert_trigger` VIEW automatically calculates the expected restock arrival date based on supplier visit schedule and lead time days — demonstrating a cross-table dependency.
 
 
 attaching screenshots:
@@ -114,6 +129,7 @@ attaching screenshots:
 
 ## Security
 
-- Only `SELECT` queries are allowed to run against the database
+- Only `SELECT` queries are allowed through the chatbot
 - Dangerous SQL keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) are blocked at both input and query level
+- Admin Panel uses parameterized queries to prevent SQL injection
 - User input is validated before being sent to the LLM
