@@ -1,5 +1,7 @@
 .env
 library.db
+library2.db
 __pycache__/
 *.pyc
 .claude/
+app2/table_embeddings.pkl
