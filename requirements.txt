@@ -1,4 +1,13 @@
+# app/ — core chatbot
 streamlit
 langchain-ollama
 langchain-core
 python-dotenv
+requests
+
+# app2/ — vector search chatbot
+sentence-transformers==5.5.0
+scikit-learn==1.8.0
+torch==2.0.1+cpu
+numpy==1.26.4
+transformers==4.46.3

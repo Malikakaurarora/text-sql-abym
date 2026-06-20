@@ -130,6 +130,14 @@ Rules:
 - Key join paths (Fine has NO student_id or faculty_id directly):
   - Fine → Student: Fine JOIN Loan ON Fine.loan_id = Loan.loan_id JOIN Student ON Loan.borrower_id = Student.student_id AND Loan.borrower_type = 'Student'
   - Fine → Faculty: Fine JOIN Loan ON Fine.loan_id = Loan.loan_id JOIN Faculty ON Loan.borrower_id = Faculty.faculty_id AND Loan.borrower_type = 'Faculty'
+  - Fine → Department (via students): Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Student ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student' JOIN Department ON Student.department_id=Department.department_id
+- Column names — use EXACTLY as shown, common mistakes to avoid:
+  - Department table: column is 'name' NOT 'department_name'
+  - Student table: columns are 'first_name', 'last_name' NOT 'student_name'
+  - Category table: column is 'name' NOT 'category_name'
+- Category.name exact values (CASE-SENSITIVE): 'Technology', 'Programming', 'Database', 'Science', 'Mathematics', 'Literature', 'Classic Fiction', 'Business', 'Self Help', 'History'
+- For book titles and person names in WHERE clauses: use LIKE '%keyword%' instead of = to handle partial matches and typos
+  Example: WHERE B.title LIKE '%Clean Code%' instead of WHERE B.title = 'Clean Code'
 """
 
 def validate_polymorphic_join(sql: str) -> str:
