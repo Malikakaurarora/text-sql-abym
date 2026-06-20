@@ -14,7 +14,7 @@ EMBEDDINGS_CACHE = os.path.join(os.path.dirname(__file__), 'table_embeddings.pkl
 
 # Richer descriptions → better semantic matching
 TABLE_DESCRIPTIONS = {
-    'Department':        'academic departments, faculty department, student department, building, department head name, which department a student or faculty belongs to',
+    'Department':        'academic departments, faculty department, student department, building, department head name, which department a student or faculty belongs to, group by department, per department count',
     'Category':          'book categories, genres, dewey decimal classification, book types, subject areas',
     'Publisher':         'book publishers, publishing houses, countries, websites, established year',
     'Author':            'book authors, writers, their nationality, biography, who wrote a book',
@@ -82,6 +82,10 @@ def get_relevant_tables(question: str, threshold: float = 0.42, min_tables: int 
         scores[table] = float(cosine_similarity(question_vec, emb.reshape(1, -1))[0][0])
     sorted_tables = sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
+    # If even the top table is too far below threshold, question is too vague
+    if sorted_tables[0][1] < 0.25:
+        return [], scores
+
     # Pick tables above threshold, but always at least min_tables and at most max_tables
     selected = [t for t, s in sorted_tables if s >= threshold]
     if len(selected) < min_tables:
@@ -122,15 +126,28 @@ Rules:
   - PurchaseOrder.status: 'Pending', 'Delivered', 'Cancelled'
   - DigitalResource.access_type: 'Open', 'Restricted'
 - Always use DISTINCT or GROUP BY to avoid duplicate rows in results unless user explicitly asks for all records
-- CRITICAL — Polymorphic borrower rule (Loan and Reservation use borrower_type + borrower_id):
-  - borrower_id alone is AMBIGUOUS — student_id=6 and faculty_id=6 are different people
-  - ALWAYS add borrower_type filter when joining Loan or Reservation to Student or Faculty:
-    JOIN Loan L ON L.borrower_id = S.student_id AND L.borrower_type = 'Student'
-    JOIN Loan L ON L.borrower_id = F.faculty_id AND L.borrower_type = 'Faculty'
-- Key join paths (Fine has NO student_id or faculty_id directly):
-  - Fine → Student: Fine JOIN Loan ON Fine.loan_id = Loan.loan_id JOIN Student ON Loan.borrower_id = Student.student_id AND Loan.borrower_type = 'Student'
-  - Fine → Faculty: Fine JOIN Loan ON Fine.loan_id = Loan.loan_id JOIN Faculty ON Loan.borrower_id = Faculty.faculty_id AND Loan.borrower_type = 'Faculty'
-  - Fine → Department (via students): Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Student ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student' JOIN Department ON Student.department_id=Department.department_id
+- CRITICAL — 3 tables use a type+id polymorphic pattern. NEVER use student_id/faculty_id directly on these tables:
+  1. Loan       → borrower_type ('Student'/'Faculty') + borrower_id
+  2. Reservation → borrower_type ('Student'/'Faculty') + borrower_id
+  3. BookReview  → reviewer_type ('Student'/'Faculty') + reviewer_id
+  - ALWAYS add the type filter when joining these tables to Student or Faculty:
+    Loan/Reservation → Student : ON borrower_id = Student.student_id AND borrower_type = 'Student'
+    Loan/Reservation → Faculty : ON borrower_id = Faculty.faculty_id AND borrower_type = 'Faculty'
+    BookReview → Student       : ON reviewer_id = Student.student_id AND reviewer_type = 'Student'
+    BookReview → Faculty       : ON reviewer_id = Faculty.faculty_id AND reviewer_type = 'Faculty'
+  - LEFT JOIN direction (Student/Faculty as base):
+    Student → Loan        : LEFT JOIN Loan ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student'
+    Student → Reservation : LEFT JOIN Reservation ON Reservation.borrower_id=Student.student_id AND Reservation.borrower_type='Student'
+    Student → BookReview  : LEFT JOIN BookReview ON BookReview.reviewer_id=Student.student_id AND BookReview.reviewer_type='Student'
+    Faculty → Loan        : LEFT JOIN Loan ON Loan.borrower_id=Faculty.faculty_id AND Loan.borrower_type='Faculty'
+    Faculty → Reservation : LEFT JOIN Reservation ON Reservation.borrower_id=Faculty.faculty_id AND Reservation.borrower_type='Faculty'
+    Faculty → BookReview  : LEFT JOIN BookReview ON BookReview.reviewer_id=Faculty.faculty_id AND BookReview.reviewer_type='Faculty'
+- Key join paths (Fine has NO student_id or faculty_id — ALWAYS go through Loan):
+  - Fine → Student: Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Student ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student'
+  - Fine → Faculty: Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Faculty ON Loan.borrower_id=Faculty.faculty_id AND Loan.borrower_type='Faculty'
+  - Fine → Department: Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Student ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student' JOIN Department ON Student.department_id=Department.department_id
+  - Student → Fine (LEFT JOIN direction): Student LEFT JOIN Loan ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student' LEFT JOIN Fine ON Fine.loan_id=Loan.loan_id
+  - NEVER write Fine.student_id or Fine.faculty_id — these columns do NOT exist
 - Column names — use EXACTLY as shown, common mistakes to avoid:
   - Department table: column is 'name' NOT 'department_name'
   - Student table: columns are 'first_name', 'last_name' NOT 'student_name'
@@ -141,17 +158,23 @@ Rules:
 """
 
 def validate_polymorphic_join(sql: str) -> str:
-    """Catch missing borrower_type filter when joining Loan/Reservation to Student/Faculty."""
+    """Catch missing type filter for Loan/Reservation (borrower_type) and BookReview (reviewer_type)."""
     s = sql.lower()
-    polymorphic = ['loan', 'reservation']
-    for tbl in polymorphic:
+    joins_student = bool(re.search(r'\bjoin\s+student\b', s))
+    joins_faculty = bool(re.search(r'\bjoin\s+faculty\b', s))
+
+    for tbl in ['loan', 'reservation']:
         if re.search(rf'\bjoin\s+{tbl}\b', s):
-            joins_student = re.search(r'\bjoin\s+student\b', s)
-            joins_faculty = re.search(r'\bjoin\s+faculty\b', s)
             if (joins_student or joins_faculty) and 'borrower_type' not in s:
                 who = 'Student' if joins_student else 'Faculty'
                 return (f"Missing borrower_type filter: when joining {tbl.capitalize()} to "
-                        f"{who}, you MUST add AND {tbl[0].upper()}.borrower_type = '{who}'")
+                        f"{who}, MUST add AND {tbl[0].upper()}.borrower_type = '{who}'")
+
+    if re.search(r'\bjoin\s+bookreview\b', s):
+        if (joins_student or joins_faculty) and 'reviewer_type' not in s:
+            who = 'Student' if joins_student else 'Faculty'
+            return (f"Missing reviewer_type filter: when joining BookReview to "
+                    f"{who}, MUST add AND BR.reviewer_type = '{who}'")
     return ""
 
 def clean_sql(raw: str) -> str:
@@ -279,6 +302,16 @@ def ask(question: str, timeout: int = 180) -> dict:
     def run():
         try:
             selected_tables, scores = get_relevant_tables(question)
+
+            if not selected_tables:
+                result_holder[0] = {
+                    "answer": None,
+                    "sql": "",
+                    "selected_tables": [],
+                    "scores": scores,
+                }
+                return
+
             sql, db_result, final_tables = ask_sql(question, selected_tables)
 
             if "Error" in db_result or db_result == "No results found.":

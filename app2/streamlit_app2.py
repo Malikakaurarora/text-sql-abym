@@ -56,21 +56,35 @@ if submitted and user_input.strip():
             with st.spinner("Stage 1: Finding relevant tables... Stage 2: Generating SQL..."):
                 result = ask(question)
 
-            # Show which tables were selected
-            if result["selected_tables"]:
-                table_scores = [(t, result["scores"][t]) for t in result["selected_tables"]]
-                table_info = " | ".join([f"`{t}` ({s:.2f})" for t, s in table_scores])
-                st.caption(f"Tables selected: {table_info}")
+            if result["answer"] is None:
+                # No table matched — ask user to clarify
+                top_scores = sorted(result["scores"].items(), key=lambda x: x[1], reverse=True)[:3]
+                score_info = ", ".join([f"{t} ({s:.2f})" for t, s in top_scores])
+                clarify_msg = (
+                    "I couldn't find relevant tables for your question. "
+                    "Could you rephrase it using more specific terms?\n\n"
+                    "**Try mentioning:** books, students, faculty, fines, loans, "
+                    "events, suppliers, reviews, digital resources, or book requests.\n\n"
+                    f"_(Best matches found: {score_info} — all below confidence threshold)_"
+                )
+                st.warning(clarify_msg)
+                st.session_state.messages2.append({"role": "assistant", "content": clarify_msg})
+            else:
+                # Show which tables were selected
+                if result["selected_tables"]:
+                    table_scores = [(t, result["scores"][t]) for t in result["selected_tables"]]
+                    table_info = " | ".join([f"`{t}` ({s:.2f})" for t, s in table_scores])
+                    st.caption(f"Tables selected: {table_info}")
 
-            st.markdown(result["answer"])
-            if result.get("sql"):
-                st.caption(f"SQL: `{result['sql']}`")
+                st.markdown(result["answer"])
+                if result.get("sql"):
+                    st.caption(f"SQL: `{result['sql']}`")
 
-    answer_display = result["answer"]
-    if result["selected_tables"]:
-        table_info = " | ".join([f"`{t}`" for t in result["selected_tables"]])
-        answer_display += f"\n\n_Tables used: {table_info}_"
-    st.session_state.messages2.append({"role": "assistant", "content": answer_display})
+                answer_display = result["answer"]
+                if result["selected_tables"]:
+                    table_info = " | ".join([f"`{t}`" for t in result["selected_tables"]])
+                    answer_display += f"\n\n_Tables used: {table_info}_"
+                st.session_state.messages2.append({"role": "assistant", "content": answer_display})
 
 # Sidebar: show all table descriptions
 with st.sidebar:
