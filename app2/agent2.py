@@ -148,6 +148,8 @@ Rules:
   - Fine → Department: Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Student ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student' JOIN Department ON Student.department_id=Department.department_id
   - Student → Fine (LEFT JOIN direction): Student LEFT JOIN Loan ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student' LEFT JOIN Fine ON Fine.loan_id=Loan.loan_id
   - NEVER write Fine.student_id or Fine.faculty_id — these columns do NOT exist
+- CRITICAL JOIN rule: Every alias used in SELECT, WHERE, HAVING, or GROUP BY MUST be defined in FROM or JOIN.
+  If you write B.category_id you MUST have JOIN Book B in the query. Never use an alias without joining its table first.
 - Column names — use EXACTLY as shown, common mistakes to avoid:
   - Department table: column is 'name' NOT 'department_name'
   - Student table: columns are 'first_name', 'last_name' NOT 'student_name'
@@ -231,7 +233,25 @@ def build_retry_hint(error: str, sql: str) -> str:
     hints = []
     col_match = re.search(r"no such column: (\S+)", error)
     if col_match:
-        hints.append(f"Column '{col_match.group(1)}' does not exist — use exact column names from schema.")
+        bad_col = col_match.group(1)
+        # Check if it's an undefined alias (e.g. B.category_id where B never joined)
+        alias_match = re.match(r"(\w+)\.", bad_col)
+        if alias_match:
+            alias = alias_match.group(1)
+            defined = re.search(
+                rf'\b(?:FROM|JOIN)\s+\w+\s+(?:AS\s+)?{alias}\b|\b(?:FROM|JOIN)\s+{alias}\b',
+                sql, re.IGNORECASE
+            )
+            if not defined:
+                hints.append(
+                    f"Alias '{alias}' is used in the query but never defined — "
+                    f"you referenced '{bad_col}' but forgot to JOIN that table. "
+                    f"Add the missing JOIN before using this alias."
+                )
+            else:
+                hints.append(f"Column '{bad_col}' does not exist — use exact column names from schema.")
+        else:
+            hints.append(f"Column '{bad_col}' does not exist — use exact column names from schema.")
     tbl_match = re.search(r"no such table: (\S+)", error)
     if tbl_match:
         hints.append(f"Table '{tbl_match.group(1)}' does not exist — use only tables shown in schema.")
