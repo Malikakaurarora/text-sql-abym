@@ -73,7 +73,7 @@ def get_table_embeddings():
     return _table_embeddings
 
 # ── Stage 1: Semantic table selection ──────────────────────────
-def get_relevant_tables(question: str, threshold: float = 0.42, min_tables: int = 3, max_tables: int = 7) -> tuple:
+def get_relevant_tables(question: str, threshold: float = 0.50, min_tables: int = 3, max_tables: int = 7) -> tuple:
     model = get_embedding_model()
     table_embeddings = get_table_embeddings()
     question_vec = model.encode(question).reshape(1, -1)
@@ -142,6 +142,13 @@ Rules:
     Faculty → Loan        : LEFT JOIN Loan ON Loan.borrower_id=Faculty.faculty_id AND Loan.borrower_type='Faculty'
     Faculty → Reservation : LEFT JOIN Reservation ON Reservation.borrower_id=Faculty.faculty_id AND Reservation.borrower_type='Faculty'
     Faculty → BookReview  : LEFT JOIN BookReview ON BookReview.reviewer_id=Faculty.faculty_id AND BookReview.reviewer_type='Faculty'
+- Key join paths for procurement tables:
+  - Supplier → Book: Supplier JOIN PurchaseOrder PO ON PO.supplier_id=S.supplier_id JOIN PurchaseOrderItem POI ON POI.po_id=PO.po_id JOIN Book B ON B.book_id=POI.book_id
+  - PurchaseOrderItem has NO supplier_id column — NEVER write POI.supplier_id
+  - PurchaseOrderItem columns: poi_id, po_id, book_id, quantity_ordered, unit_price, quantity_received
+  - quantity_received is an INTEGER (count of books received), NOT a date — NEVER use it in date()
+  - "When books were delivered/received/added" → use PurchaseOrder.expected_delivery (closest available date)
+  - To check books are actually delivered: add WHERE PO.status = 'Delivered'
 - Key join paths (Fine has NO student_id or faculty_id — ALWAYS go through Loan):
   - Fine → Student: Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Student ON Loan.borrower_id=Student.student_id AND Loan.borrower_type='Student'
   - Fine → Faculty: Fine JOIN Loan ON Fine.loan_id=Loan.loan_id JOIN Faculty ON Loan.borrower_id=Faculty.faculty_id AND Loan.borrower_type='Faculty'
@@ -157,6 +164,116 @@ Rules:
 - Category.name exact values (CASE-SENSITIVE): 'Technology', 'Programming', 'Database', 'Science', 'Mathematics', 'Literature', 'Classic Fiction', 'Business', 'Self Help', 'History'
 - For book titles and person names in WHERE clauses: use LIKE '%keyword%' instead of = to handle partial matches and typos
   Example: WHERE B.title LIKE '%Clean Code%' instead of WHERE B.title = 'Clean Code'
+- COUNTING borrows: "how many times borrowed" / "borrow count" / "borrowed N times" → COUNT all Loan rows, NO return_date filter. Both active and returned loans count.
+  NEVER add return_date IS NOT NULL when question is just about borrow frequency/count.
+- LATE RETURN vs OVERDUE — these are different, never confuse them:
+  - "returned late" / "late returns" / "late return pattern" → return_date IS NOT NULL AND return_date > due_date
+  - "currently overdue" / "not yet returned" / "still borrowed" → return_date IS NULL AND due_date < date('now')
+  - NEVER use return_date IS NULL for "late return" queries
+- "MEMBERS" means BOTH Student AND Faculty — use UNION or handle both with borrower_type:
+  - Always check: if question says "members", "borrowers", "people", "who" — include both Student and Faculty
+  - Use UNION ALL to combine Student and Faculty results when listing members
+- DATE RANGE RULES — very important, follow exactly:
+  - "last N months/days/weeks" means FROM past TO now:
+      col >= date('now', '-N months') AND col <= date('now')
+  - "overdue books" = return_date IS NULL AND due_date < date('now')
+  - "overdue books in last N months" = return_date IS NULL AND due_date < date('now') AND due_date >= date('now', '-N months')
+  - "month-wise trend of overdue" → GROUP BY strftime('%Y-%m', L.due_date), filter on due_date range, NOT issue_date
+  - NEVER write due_date < date('now', '-N months') for "last N months" — that means OLDER than N months ago (wrong direction)
+  - "recent", "last year" = date >= date('now', '-1 year')
+  - "this month" = strftime('%Y-%m', col) = strftime('%Y-%m', 'now')
+"""
+
+_SKIP_ALIAS_WORDS = {
+    'on','where','set','left','right','inner','outer','cross','natural',
+    'full','join','from','using','group','order','having','limit','union',
+    'and','or','not','as','select','distinct','by','with'
+}
+
+def validate_columns(sql: str) -> str:
+    """Programmatically verify every alias.column in the SQL exists in the actual DB schema."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    table_columns = {}
+    for (tbl,) in cursor.fetchall():
+        cursor.execute(f"PRAGMA table_info({tbl})")
+        table_columns[tbl.lower()] = {row[1].lower() for row in cursor.fetchall()}
+    conn.close()
+
+    # Build alias → table map from FROM/JOIN clauses
+    alias_map = {}
+    for m in re.finditer(r'\b(?:FROM|JOIN)\s+(\w+)(?:\s+AS\s+(\w+)|\s+(\w+))?', sql, re.IGNORECASE):
+        table = m.group(1)
+        raw_alias = m.group(2) or m.group(3)
+        if raw_alias and raw_alias.lower() in _SKIP_ALIAS_WORDS:
+            raw_alias = None
+        alias = raw_alias or table
+        alias_map[alias.lower()] = table.lower()
+        alias_map[table.lower()] = table.lower()
+
+    errors = []
+    seen = set()
+    for m in re.finditer(r'\b(\w+)\.(\w+)\b', sql):
+        alias, col = m.group(1).lower(), m.group(2).lower()
+        key = (alias, col)
+        if key in seen or alias not in alias_map:
+            continue
+        seen.add(key)
+        tbl = alias_map[alias]
+        if tbl in table_columns and col not in table_columns[tbl]:
+            available = ', '.join(sorted(table_columns[tbl]))
+            errors.append(
+                f"'{m.group(1)}.{m.group(2)}' is invalid — "
+                f"table '{tbl}' has no column '{col}'. "
+                f"Available columns: {available}"
+            )
+    return " | ".join(errors)
+
+FEW_SHOT_EXAMPLES = """
+Correct SQL examples — follow these patterns exactly:
+
+-- Supplier → Book (ALWAYS go Supplier→PurchaseOrder→PurchaseOrderItem→Book, never POI.supplier_id)
+SELECT DISTINCT S.name
+FROM Supplier S
+JOIN PurchaseOrder PO ON PO.supplier_id = S.supplier_id
+JOIN PurchaseOrderItem POI ON POI.po_id = PO.po_id
+JOIN Loan L ON L.book_id = POI.book_id
+WHERE PO.status = 'Delivered' AND L.return_date IS NULL AND L.due_date < date('now');
+
+-- Members = Student + Faculty (always UNION ALL both types)
+SELECT 'Student' AS type, S.first_name, S.last_name
+FROM Student S
+JOIN Loan L ON L.borrower_id = S.student_id AND L.borrower_type = 'Student'
+JOIN Fine F ON F.loan_id = L.loan_id WHERE F.status = 'Unpaid'
+UNION ALL
+SELECT 'Faculty', F2.first_name, F2.last_name
+FROM Faculty F2
+JOIN Loan L ON L.borrower_id = F2.faculty_id AND L.borrower_type = 'Faculty'
+JOIN Fine Fi ON Fi.loan_id = L.loan_id WHERE Fi.status = 'Unpaid';
+
+-- Late return pattern (return_date > due_date, NOT return_date IS NULL)
+SELECT S.first_name, S.last_name, COUNT(*) AS late_count
+FROM Student S
+JOIN Loan L ON L.borrower_id = S.student_id AND L.borrower_type = 'Student'
+WHERE L.return_date IS NOT NULL AND L.return_date > L.due_date
+AND L.return_date >= date('now', '-1 year')
+GROUP BY S.student_id HAVING COUNT(*) > 3;
+
+-- Month-wise trend last N months (filter by due_date range, group by due_date NOT issue_date)
+SELECT strftime('%Y-%m', L.due_date) AS month, COUNT(*) AS overdue_count
+FROM Loan L
+WHERE L.return_date IS NULL AND L.due_date < date('now')
+AND L.due_date >= date('now', '-6 months')
+GROUP BY month ORDER BY month;
+
+-- Fine → Department (MUST go Fine→Loan→Student→Department, no shortcut)
+SELECT D.name, SUM(F.fine_amount) AS total
+FROM Department D
+JOIN Student S ON S.department_id = D.department_id
+JOIN Loan L ON L.borrower_id = S.student_id AND L.borrower_type = 'Student'
+JOIN Fine F ON F.loan_id = L.loan_id
+GROUP BY D.department_id;
 """
 
 def validate_polymorphic_join(sql: str) -> str:
@@ -278,6 +395,7 @@ def ask_sql(question: str, selected_tables: list, max_tries: int = 3) -> tuple:
     llm = get_llm()
     last_error = ""
     sql = ""
+    result = "No results found."
     current_tables = list(selected_tables)
 
     for _ in range(max_tries):
@@ -289,13 +407,20 @@ DATABASE ENGINE: SQLite (NOT PostgreSQL, NOT MySQL).
 
 {schema}
 {RULES}
+{FEW_SHOT_EXAMPLES}
 Question: {question}{retry_note}
 
 Return ONLY the SQL query, no explanation, no markdown."""
         raw = llm.invoke([HumanMessage(content=prompt)]).content
         sql = clean_sql(raw)
 
-        # Proactive check — catch missing borrower_type before hitting DB
+        # Proactive check 1 — catch invalid columns before hitting DB
+        col_error = validate_columns(sql)
+        if col_error:
+            last_error = f"Column Error: {col_error}"
+            continue
+
+        # Proactive check 2 — catch missing borrower_type before hitting DB
         poly_error = validate_polymorphic_join(sql)
         if poly_error:
             last_error = f"Logic Error: {poly_error}"
@@ -314,6 +439,37 @@ Return ONLY the SQL query, no explanation, no markdown."""
         last_error = result
 
     return sql, result, current_tables
+
+def generate_fallback_query(question: str, original_sql: str, schema: str) -> str:
+    llm = get_llm()
+    prompt = f"""You are a SQLite SQL expert. A query returned no results.
+
+{schema}
+{RULES}
+
+Original question: {question}
+Original SQL (returned no results): {original_sql}
+
+The original query was too specific or used narrow filters (e.g. a strict date range, a status filter, etc.).
+Write a BROADER fallback SQL query that relaxes those filters to return related useful data.
+Examples of relaxing:
+- "last 6 months" → remove the date filter entirely, show all records
+- specific status filter → remove the status filter
+- exact name match → use LIKE '%keyword%'
+- COUNT with HAVING → lower or remove the HAVING threshold
+
+Return ONLY the fallback SQL query, no explanation, no markdown."""
+    raw = llm.invoke([HumanMessage(content=prompt)]).content
+    return clean_sql(raw)
+
+def explain_no_results(question: str, sql: str) -> str:
+    return (
+        "**No records found** matching these criteria.\n\n"
+        "This could mean:\n"
+        "- The data genuinely doesn't exist in the database\n"
+        "- The query conditions may be too specific (e.g. narrow date range or strict filter)\n\n"
+        "_If you expected results, try rephrasing with broader conditions._"
+    )
 
 def ask(question: str, timeout: int = 180) -> dict:
     result_holder = [None]
@@ -334,7 +490,33 @@ def ask(question: str, timeout: int = 180) -> dict:
 
             sql, db_result, final_tables = ask_sql(question, selected_tables)
 
-            if "Error" in db_result or db_result == "No results found.":
+            if db_result == "No results found.":
+                # Try a broader fallback query before giving up
+                fallback_schema = get_schema_for_tables(final_tables)
+                fallback_sql = generate_fallback_query(question, sql, fallback_schema)
+                fallback_result = run_sql(fallback_sql)
+
+                if "Error" not in fallback_result and fallback_result != "No results found.":
+                    answer = "> _Exact match not found — showing closest available data:_\n\n"
+                    answer += format_result(fallback_result)
+                    result_holder[0] = {
+                        "answer": answer,
+                        "sql": fallback_sql,
+                        "selected_tables": final_tables,
+                        "scores": scores,
+                    }
+                    return
+
+                explanation = explain_no_results(question, sql)
+                result_holder[0] = {
+                    "answer": explanation,
+                    "sql": sql,
+                    "selected_tables": final_tables,
+                    "scores": scores,
+                }
+                return
+
+            if "Error" in db_result:
                 result_holder[0] = {
                     "answer": f"Could not find data.\n\nSQL: `{sql}`\nDB: {db_result}",
                     "sql": sql,
