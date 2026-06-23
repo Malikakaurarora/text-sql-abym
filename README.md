@@ -1,159 +1,216 @@
 # Library Management System — NL to SQL Chatbot
 
-A two-stage Library Management System featuring a Natural Language to SQL chatbot and a full Admin Panel — built entirely with free, local tools.
+A university library management system with a Natural Language to SQL chatbot — built in 3 versions, each improving on the last. You can ask questions in plain English and it queries the database for you.
 
-## Tech Stack
+Built entirely with free tools — no paid APIs needed (except app3 which uses a free tier).
 
-| Layer | Technology |
-|---|---|
-| Database | SQLite |
-| LLM | Qwen2.5-Coder:7b (via Ollama — free, runs locally) |
-| Backend Logic | Python + LangChain |
-| UI | Streamlit |
-
-## LLM Decision — Why Ollama and Why Qwen2.5-Coder
-
-The original plan was to use **Groq API (Llama 3.3 70B)** as the LLM backend. However, during development, access to the Groq API was denied/restricted.
-
-As an alternative, **Ollama** was chosen because:
-- Completely free with no API key required
-- Runs entirely on the local machine (no internet needed after setup)
-- Suitable for demos and prototypes
-
-**Model selection journey:**
-- `llama3.2` — general purpose, struggled with complex JOIN queries (wrong column names, PostgreSQL syntax)
-- `sqlcoder:7b` — SQL-specific but same issues persisted
-- `qwen2.5-coder:7b` — code/SQL specialized model, significantly better accuracy on multi-table queries ✅
-
-The tradeoff is speed — Ollama on CPU takes 1–3 minutes per query. In a production setup, Groq or OpenAI API would be preferred.
+---
 
 ## Project Structure
 
 ```
 text-sql/
-├── app/
-│   ├── create_db.py       # Creates SQLite database with all tables and sample data
-│   ├── agent.py           # NL to SQL logic — LLM generates SQL, runs on DB, returns answer
-│   ├── admin.py           # Admin CRUD operations (return book, update stock, add records)
-│   └── streamlit_app.py   # Two-tab UI: Chatbot + Admin Panel
-├── library_schema.sql     # Full DB schema with VIEW definition
-├── sample_data.sql        # Sample data (5 rows per table)
-├── requirements.txt       # Python dependencies
-└── README.md
+├── app/          ← Version 1: Basic NL-to-SQL (8 tables, Ollama)
+├── app2/         ← Version 2: Vector search + smarter SQL (23 tables, Ollama)
+├── app3/         ← Version 3: Proper MCP implementation (23 tables, OpenRouter free)
+├── library_schema.sql
+├── sample_data.sql
+└── requirements.txt
 ```
-
-## Features
-
-### Stage 1 — NL to SQL Chatbot
-- Ask questions in plain English about books, members, suppliers, stock alerts
-- LLM converts question to SQL automatically using the database schema
-- Answers pulled directly from SQLite database — no hallucination in final output
-- Only SELECT queries allowed (read-only, secure)
-- Smart retry logic — if SQL fails, model gets targeted error hints and retries
-
-### Stage 2 — Admin Panel
-- Return a borrowed book (auto-updates stock)
-- Update available copies for any book
-- Add new books to the database
-- Register new members
-- Resolve stock alerts
-
-## Setup & Run
-
-### Prerequisites
-- Python 3.11+
-- Ollama installed ([download here](https://ollama.com/download))
 
 ---
 
-### Step 1 — Install Python Dependencies
+## Version 1 — app/
+**Basic NL-to-SQL + Admin Panel**
 
-Open terminal and run:
+The first version. Simple 8-table library database with a chatbot and a separate admin panel for librarians.
+
+**What it does:**
+- Ask questions like "which books are overdue" or "show low stock books"
+- LLM converts your question to SQL and runs it on the database
+- Admin panel for returning books, updating stock, adding members — no SQL needed
+
+**Tech:**
+- SQLite (8 tables)
+- Ollama + qwen2.5-coder:7b (free, runs locally)
+- Streamlit UI
+
+**Run:**
+```bash
+python app/create_db.py
+ollama serve  # in a separate terminal
+streamlit run app/streamlit_app.py
+```
+
+---
+
+## Version 2 — app2/
+**Two-Stage Vector Search + SQL Generation (23 tables)**
+
+Upgraded to a much bigger university library database with 23 tables. The problem with version 1 was that sending all 23 tables to the LLM at once was too much — the model would get confused. So I added a vector search stage that picks only the relevant tables before generating SQL.
+
+**How it works:**
+```
+User question
+     ↓
+Stage 1: Sentence embeddings → cosine similarity → pick relevant tables
+     ↓
+Stage 2: Only those tables' schema sent to LLM → SQL generated
+     ↓
+SQLite result returned
+```
+
+**What got better:**
+- Handles complex multi-table queries (loans + fines + departments + suppliers etc.)
+- Schema validation catches wrong column names before hitting the DB
+- Self-correcting retry loop with error hints
+- Few-shot examples in the prompt for better SQL accuracy
+
+**The honest problem:** qwen2.5-coder:7b is a 7B model and it's not perfect. Had to keep adding rules for edge cases — overdue vs late return logic, polymorphic joins, date direction errors etc. It works but it's high maintenance.
+
+**Tech:**
+- SQLite (23 tables — Student, Faculty, Book, Loan, Fine, Supplier, Event, Review, DigitalResource and more)
+- Sentence Transformers (all-MiniLM-L6-v2) for table selection
+- Ollama + qwen2.5-coder:7b
+- Streamlit UI
+
+**Run:**
+```bash
+# Make sure Ollama is running
+python app2/create_db2.py
+streamlit run app2/streamlit_app2.py
+```
+
+---
+
+## Version 3 — app3/
+**Proper MCP (Model Context Protocol) Implementation**
+
+My manager asked me to use MCP, so I rebuilt the whole thing properly.
+
+**What is MCP?**
+MCP (Model Context Protocol) is an open standard by Anthropic. Instead of the LLM blindly generating SQL, it gets tools it can call — like `list_tables`, `describe_table`, `run_query`. The LLM decides when to call which tool, looks at the actual schema, then writes correct SQL.
+
+**Architecture:**
+```
+User question
+     ↓
+MCP Client (agent3.py) — discovers tools from MCP server
+     ↓  [stdio protocol]
+MCP Server (mcp_server.py) — standalone process exposing DB as tools
+     ↓
+SQLite (library2.db)
+```
+
+**Why this is better than app2:**
+- No hardcoded rules — the model checks schema itself before writing SQL
+- No validate_columns() hacks — model already knows correct column names
+- Self-correcting — if SQL errors, error goes back to model and it fixes it
+- Any MCP-compatible client (Claude Desktop, etc.) can connect to this server
+
+**What tools the MCP server exposes:**
+| Tool | What it does |
+|---|---|
+| `list_tables` | Shows all 23 tables |
+| `describe_table` | Returns exact column names + types |
+| `run_query` | Executes SQL, returns results |
+
+**Tech:**
+- Python 3.11+ (required for `mcp` package)
+- `mcp` package (Anthropic's official MCP SDK)
+- OpenRouter free API (gpt-oss-120b model, completely free)
+- Streamlit UI
+
+**Setup:**
+```bash
+# needs Python 3.11+
+pip install mcp openai streamlit python-dotenv requests
+
+# add to .env file:
+OPENROUTER_API_KEY=your_key_here
+# get free key from openrouter.ai
+```
+
+**Run:**
+```bash
+streamlit run app3/streamlit_app3.py
+```
+
+**Sample queries that work well:**
+- Which students have overdue books and unpaid fines?
+- Which department has the highest total unpaid fines?
+- Show suppliers whose books get borrowed the most
+- Which books are reserved by one person but borrowed by someone else?
+- Show month-wise trend of late returns for the last 6 months
+- Which students registered for events but also have overdue books?
+- Which department's students have borrowed the most digital resources?
+
+---
+
+## How Each Version Compares
+
+| | app/ | app2/ | app3/ |
+|---|---|---|---|
+| Tables | 8 | 23 | 23 |
+| Table selection | All sent to LLM | Vector similarity | LLM discovers via MCP |
+| SQL accuracy | Basic | Medium (needs rules) | High (schema-aware) |
+| Self-correction | Basic retry | Hints + validate_columns | Tool feedback loop |
+| Rules to maintain | Few | Many (20+) | None |
+| Cost | Free | Free | Free (OpenRouter) |
+| Speed | Slow (local) | Slow (local) | Fast (cloud) |
+
+---
+
+## Database Schema (app2 & app3)
+
+23 tables covering the full university library system:
+
+**Books & Catalog:** Book, Author, BookAuthor, Category, Publisher, Shelf, Journal
+
+**Members:** Student, Faculty, Department
+
+**Circulation:** Loan, Reservation, Fine
+
+**Procurement:** Supplier, PurchaseOrder, PurchaseOrderItem
+
+**Engagement:** Event, EventRegistration, Review, BookRequest, Notification
+
+**Digital:** DigitalResource, DigitalAccess
+
+---
+
+## Tech Stack Summary
+
+| | Version 1 | Version 2 | Version 3 |
+|---|---|---|---|
+| LLM | Ollama (local) | Ollama (local) | OpenRouter (cloud, free) |
+| Model | qwen2.5-coder:7b | qwen2.5-coder:7b | gpt-oss-120b |
+| DB | SQLite 8 tables | SQLite 23 tables | SQLite 23 tables |
+| Key feature | Basic chatbot + admin | Vector table selection | MCP protocol |
+| Python version | 3.8+ | 3.8+ | 3.11+ |
+
+---
+
+## Setup
+
+**Install Ollama** (needed for app/ and app2/):
+```bash
+# download from ollama.com then:
+ollama pull qwen2.5-coder:7b
+```
+
+**Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
----
-
-### Step 2 — Install Ollama
-
-Download and install Ollama from: https://ollama.com/download
-
-After installing, open terminal and pull the model (4.7 GB download — takes a few minutes):
-```bash
-ollama pull qwen2.5-coder:7b
+**For app3 only** — add to a `.env` file in the project root:
 ```
+OPENROUTER_API_KEY=your_key_here
+```
+Get a free key from [openrouter.ai](https://openrouter.ai)
 
 ---
-
-### Step 3 — Create the Database
-
-```bash
-python app/create_db.py
-```
-
-This creates `library.db` with all 8 tables, sample data, and the stock alert view.
-
----
-
-### Step 4 — Start Ollama Server
-
-Open a **new terminal window** and run:
-```bash
-ollama serve
-```
-
-Keep this terminal open while using the app.
-
-> On Windows, you can also start Ollama from the system tray after installation.
-
----
-
-### Step 5 — Run the App
-
-In your original terminal:
-```bash
-python -m streamlit run app/streamlit_app.py
-```
-
-Open browser at: `http://localhost:8501`
-
----
-
-## Sample Chatbot Questions
-
-- `Show all books with low stock`
-- `Which books are currently borrowed?`
-- `When will Clean Code be restocked?`
-- `List all suppliers`
-- `Which suppliers are visiting in September?`
-- `Tell me supplier name which supplied book in the month of July along with the book title`
-- `Which books need reordering, and which supplier will deliver them?`
-
-## How It Works
-
-```
-User Question (English)
-        ↓
-LLM (Ollama / Qwen2.5-Coder:7b)
-Converts question to SQL using schema + rules
-        ↓
-SQLite Database (library.db)
-Executes the SQL
-        ↓
-If SQL fails → retry with targeted error hint (up to 3 attempts)
-        ↓
-Result formatted directly as table/list
-No second LLM call — eliminates hallucination
-        ↓
-Streamlit UI displays the answer
-```
-
-## Database Schema
-
-8 tables: `Supplier`, `Publication`, `Supplier_Publication`, `Supplier_Visit_Schedule`, `Book`, `Stock_Alert`, `Member`, `Issue_Record`
-
-Key feature: `vw_stock_alert_trigger` VIEW automatically calculates the expected restock arrival date based on supplier visit schedule and lead time days.
 
 ## Screenshots
 
@@ -161,20 +218,13 @@ Key feature: `vw_stock_alert_trigger` VIEW automatically calculates the expected
 
 <img width="1240" height="871" alt="image" src="https://github.com/user-attachments/assets/b8497917-4fe0-4fd7-a20f-7b33314f48f4" />
 
-## Security
-
-- Only `SELECT` queries are allowed through the chatbot
-- Dangerous SQL keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) are blocked at both input and query level these can be done only on admin level for that i have another panel on teh ui 
-- Admin Panel uses parameterized queries to prevent SQL injection
-- User input is validated before being sent to the LLM
-
-
-Stage 2 — Admin Panel
-A separate Admin Panel was added for librarians to manage data directly — returning books, updating stock, adding new books and members, and resolving stock alerts — all through a simple UI without writing any SQL.
 <img width="1577" height="870" alt="image" src="https://github.com/user-attachments/assets/08a1cc4f-8656-471e-ac8b-c88e78c1da99" />
 
-Challenges Faced
-Groq API access was denied during development, so Ollama was used as a free local alternative
-Local LLM (Ollama) runs on CPU which results in slower response times (30–60 seconds per query) compared to cloud-based APIs
-Ensuring the LLM generates correct SQL required providing detailed schema context and example queries in the prompt
-Manager ko share karo — link bhi paste kar dena GitHub ka uske baad!
+---
+
+## Security
+
+- Only `SELECT` queries allowed through chatbot — no data modification
+- Dangerous keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) blocked at input level
+- Admin panel uses parameterized queries to prevent SQL injection
+- `.env` file with API keys is gitignored
