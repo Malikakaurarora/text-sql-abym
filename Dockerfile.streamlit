@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir streamlit requests python-dotenv
+
+COPY app3/streamlit_app3.py app3/streamlit_app3.py
+
+CMD ["streamlit", "run", "app3/streamlit_app3.py", "--server.port=8501", "--server.address=0.0.0.0"]

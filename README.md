@@ -10,9 +10,20 @@ Built entirely with free tools — no paid APIs needed (except app3 which uses a
 
 ```
 text-sql/
-├── app/          ← Version 1: Basic NL-to-SQL (8 tables, Ollama)
-├── app2/         ← Version 2: Vector search + smarter SQL (23 tables, Ollama)
-├── app3/         ← Version 3: Proper MCP implementation (23 tables, OpenRouter free)
+├── app/                        ← Version 1: Basic NL-to-SQL (8 tables, Ollama)
+├── app2/                       ← Version 2: Vector search + smarter SQL (23 tables, Ollama)
+├── app3/                       ← Version 3: MCP + FastAPI server + PostgreSQL
+│   ├── mcp_server.py           ← MCP server exposing DB as tools (works with SQLite + PostgreSQL)
+│   ├── agent3.py               ← MCP client using OpenRouter free API
+│   ├── server.py               ← FastAPI server: /query, /logs, /health
+│   ├── streamlit_app3.py       ← Streamlit client (talks to server over HTTP)
+│   ├── migrate_postgres.py     ← Creates all 24 tables in PostgreSQL
+│   └── migrate_data.py         ← Copies data from SQLite → PostgreSQL
+├── logs.json                   ← Single source of truth: all 24 table schemas
+├── .env.example                ← Environment variable template
+├── docker-compose.yml          ← PostgreSQL + Server + Streamlit
+├── Dockerfile.server           ← FastAPI server container
+├── Dockerfile.streamlit        ← Streamlit client container
 ├── library_schema.sql
 ├── sample_data.sql
 └── requirements.txt
@@ -84,59 +95,114 @@ streamlit run app2/streamlit_app2.py
 ---
 
 ## Version 3 — app3/
-**Proper MCP (Model Context Protocol) Implementation**
+**MCP + FastAPI Server + PostgreSQL (Production-ready)**
 
-My manager asked me to use MCP, so I rebuilt the whole thing properly.
+Rebuilt with proper architecture: MCP for SQL accuracy, client-server separation, PostgreSQL on Supabase, and a query log for every request.
 
-**What is MCP?**
-MCP (Model Context Protocol) is an open standard by Anthropic. Instead of the LLM blindly generating SQL, it gets tools it can call — like `list_tables`, `describe_table`, `run_query`. The LLM decides when to call which tool, looks at the actual schema, then writes correct SQL.
+### Architecture
 
-**Architecture:**
 ```
-User question
-     ↓
-MCP Client (agent3.py) — discovers tools from MCP server
-     ↓  [stdio protocol]
-MCP Server (mcp_server.py) — standalone process exposing DB as tools
-     ↓
-SQLite (library2.db)
+Streamlit Client
+      ↓  HTTP POST /query
+FastAPI Server (server.py)
+      ↓  MCP stdio protocol
+MCP Server (mcp_server.py)
+      ↓
+PostgreSQL on Supabase  ←→  QueryLog (logs every request)
 ```
 
-**Why this is better than app2:**
-- No hardcoded rules — the model checks schema itself before writing SQL
-- No validate_columns() hacks — model already knows correct column names
-- Self-correcting — if SQL errors, error goes back to model and it fixes it
-- Any MCP-compatible client (Claude Desktop, etc.) can connect to this server
+### What is MCP?
 
-**What tools the MCP server exposes:**
+MCP (Model Context Protocol) is an open standard by Anthropic. Instead of the LLM blindly generating SQL from a hardcoded schema, it gets tools it can call:
+
 | Tool | What it does |
 |---|---|
-| `list_tables` | Shows all 23 tables |
+| `list_tables` | Shows all tables in the database |
 | `describe_table` | Returns exact column names + types |
 | `run_query` | Executes SQL, returns results |
 
-**Tech:**
-- Python 3.11+ (required for `mcp` package)
-- `mcp` package (Anthropic's official MCP SDK)
-- OpenRouter free API (gpt-oss-120b model, completely free)
-- Streamlit UI
+The LLM decides when to call which tool, checks the actual schema, then writes correct SQL. No hardcoded rules needed.
 
-**Setup:**
+### What's new in this version
+
+**1. logs.json — Single source of truth**
+All 24 table schemas (columns, types, foreign keys) live in one file. To add or remove a table in future, only change `logs.json`.
+
+**2. QueryLog table**
+Every question asked through the chatbot is logged:
+- `user_question` — what the user asked
+- `generated_sql` — the SQL that was run
+- `sql_execution_time` — how long it took (ms)
+- `sql_success` — did it work or fail
+- `error_message` — if it failed, why
+- `response_text` — the answer shown to the user
+
+**3. Client-Server separation**
+- `server.py` runs as an independent FastAPI server
+- `streamlit_app3.py` is a pure HTTP client — no direct DB access
+- They can run on different machines
+
+**4. PostgreSQL on Supabase**
+- All 24 tables created on Supabase (free cloud PostgreSQL)
+- Data migrated from SQLite → PostgreSQL
+- Auto-detects: if `DATABASE_URL` is set → PostgreSQL, otherwise → local SQLite
+
+### Setup
+
+**1. Install dependencies (Python 3.11 required):**
 ```bash
-# needs Python 3.11+
-pip install mcp openai streamlit python-dotenv requests
-
-# add to .env file:
-OPENROUTER_API_KEY=your_key_here
-# get free key from openrouter.ai
+pip install mcp openai fastapi "uvicorn[standard]" psycopg2-binary python-dotenv requests streamlit
 ```
 
-**Run:**
+**2. Create `.env` file:**
 ```bash
+cp .env.example .env
+# then edit .env and add your keys
+```
+
+Required keys in `.env`:
+```
+OPENROUTER_API_KEY=sk-or-...     # free at openrouter.ai
+DATABASE_URL=postgresql://...    # Supabase or any PostgreSQL server
+```
+
+**3. Set up PostgreSQL (one time only):**
+```bash
+# Creates all 24 tables in your PostgreSQL database
+python app3/migrate_postgres.py
+
+# Copies existing data from SQLite → PostgreSQL
+python app3/migrate_data.py
+```
+
+**4. Run:**
+```bash
+# Terminal 1 — start the API server
+uvicorn app3.server:app --port 8000
+
+# Terminal 2 — start the Streamlit client
 streamlit run app3/streamlit_app3.py
 ```
 
-**Sample queries that work well:**
+**5. Available endpoints:**
+```
+GET  /health   → {"status": "ok", "database": "postgresql"}
+POST /query    → {"question": "..."} → {response, sql, execution_time, query_id}
+GET  /logs     → list of all logged queries
+```
+
+### Docker (run everything together)
+
+```bash
+# Copy and fill in .env first
+cp .env.example .env
+
+docker-compose up --build
+# PostgreSQL on :5432, server on :8000, Streamlit on :8501
+```
+
+### Sample queries
+
 - Which students have overdue books and unpaid fines?
 - Which department has the highest total unpaid fines?
 - Show suppliers whose books get borrowed the most
@@ -151,19 +217,22 @@ streamlit run app3/streamlit_app3.py
 
 | | app/ | app2/ | app3/ |
 |---|---|---|---|
-| Tables | 8 | 23 | 23 |
+| Tables | 8 | 23 | 24 (+ QueryLog) |
 | Table selection | All sent to LLM | Vector similarity | LLM discovers via MCP |
 | SQL accuracy | Basic | Medium (needs rules) | High (schema-aware) |
 | Self-correction | Basic retry | Hints + validate_columns | Tool feedback loop |
 | Rules to maintain | Few | Many (20+) | None |
-| Cost | Free | Free | Free (OpenRouter) |
+| Database | SQLite (local) | SQLite (local) | PostgreSQL (Supabase) |
+| Architecture | Single script | Single script | Client-Server (FastAPI + Streamlit) |
+| Query logging | No | No | Yes (QueryLog table) |
+| Cost | Free | Free | Free (OpenRouter + Supabase free tier) |
 | Speed | Slow (local) | Slow (local) | Fast (cloud) |
 
 ---
 
-## Database Schema (app2 & app3)
+## Database Schema (app3)
 
-23 tables covering the full university library system:
+24 tables covering the full university library system:
 
 **Books & Catalog:** Book, Author, BookAuthor, Category, Publisher, Shelf, Journal
 
@@ -173,9 +242,13 @@ streamlit run app3/streamlit_app3.py
 
 **Procurement:** Supplier, PurchaseOrder, PurchaseOrderItem
 
-**Engagement:** Event, EventRegistration, Review, BookRequest, Notification
+**Engagement:** LibraryEvent, EventRegistration, BookReview, BookRequest
 
 **Digital:** DigitalResource, DigitalAccess
+
+**Logging:** QueryLog ← tracks every chatbot query
+
+Full schema with column types and relationships: see `logs.json`
 
 ---
 
@@ -185,8 +258,8 @@ streamlit run app3/streamlit_app3.py
 |---|---|---|---|
 | LLM | Ollama (local) | Ollama (local) | OpenRouter (cloud, free) |
 | Model | qwen2.5-coder:7b | qwen2.5-coder:7b | gpt-oss-120b |
-| DB | SQLite 8 tables | SQLite 23 tables | SQLite 23 tables |
-| Key feature | Basic chatbot + admin | Vector table selection | MCP protocol |
+| DB | SQLite 8 tables | SQLite 23 tables | PostgreSQL 24 tables (Supabase) |
+| Key feature | Basic chatbot + admin | Vector table selection | MCP + client-server + query logs |
 | Python version | 3.8+ | 3.8+ | 3.11+ |
 
 ---
@@ -199,16 +272,26 @@ streamlit run app3/streamlit_app3.py
 ollama pull qwen2.5-coder:7b
 ```
 
-**Install dependencies:**
+**Install all dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-**For app3 only** — add to a `.env` file in the project root:
+**For app3 — create a `.env` file in the project root:**
 ```
-OPENROUTER_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_key_here    # free from openrouter.ai
+DATABASE_URL=postgresql://...        # free from supabase.com
 ```
-Get a free key from [openrouter.ai](https://openrouter.ai)
+
+---
+
+## Security
+
+- Only `SELECT` queries allowed through chatbot — no data modification
+- Dangerous keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) blocked at input level
+- Admin panel uses parameterized queries to prevent SQL injection
+- `.env` file with API keys is gitignored — never committed to git
+- PostgreSQL credentials stored only in `.env`, never hardcoded
 
 ---
 
@@ -219,12 +302,3 @@ Get a free key from [openrouter.ai](https://openrouter.ai)
 <img width="1240" height="871" alt="image" src="https://github.com/user-attachments/assets/b8497917-4fe0-4fd7-a20f-7b33314f48f4" />
 
 <img width="1577" height="870" alt="image" src="https://github.com/user-attachments/assets/08a1cc4f-8656-471e-ac8b-c88e78c1da99" />
-
----
-
-## Security
-
-- Only `SELECT` queries allowed through chatbot — no data modification
-- Dangerous keywords (`DROP`, `DELETE`, `INSERT`, `UPDATE`, `ALTER`) blocked at input level
-- Admin panel uses parameterized queries to prevent SQL injection
-- `.env` file with API keys is gitignored

@@ -1,0 +1,390 @@
+{
+  "_meta": {
+    "description": "Single source of truth for all database table schemas, columns, types, and relationships. Do not hardcode table info anywhere else — read from here.",
+    "total_tables": 24,
+    "database_sqlite": "library2.db",
+    "database_postgres_env": "DATABASE_URL"
+  },
+  "tables": {
+    "Author": {
+      "columns": [
+        {"name": "author_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "first_name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "last_name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "nationality", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true},
+        {"name": "birth_year", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": true},
+        {"name": "bio", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "Book": {
+      "columns": [
+        {"name": "book_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "isbn", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "title", "type": "TEXT", "pg_type": "VARCHAR(500)", "primary_key": false, "nullable": false},
+        {"name": "publisher_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "category_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "shelf_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "publication_year", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "edition", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "language", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": true},
+        {"name": "total_copies", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "available_copies", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "price", "type": "REAL", "pg_type": "NUMERIC(10,2)", "primary_key": false, "nullable": true},
+        {"name": "reorder_threshold", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "publisher_id", "references_table": "Publisher", "references_column": "publisher_id"},
+        {"column": "category_id", "references_table": "Category", "references_column": "category_id"},
+        {"column": "shelf_id", "references_table": "Shelf", "references_column": "shelf_id"}
+      ],
+      "indexes": ["isbn", "title", "category_id"]
+    },
+    "BookAuthor": {
+      "columns": [
+        {"name": "ba_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "book_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "author_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "role", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "book_id", "references_table": "Book", "references_column": "book_id"},
+        {"column": "author_id", "references_table": "Author", "references_column": "author_id"}
+      ],
+      "indexes": ["book_id", "author_id"]
+    },
+    "BookRequest": {
+      "columns": [
+        {"name": "request_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "student_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "book_title", "type": "TEXT", "pg_type": "VARCHAR(500)", "primary_key": false, "nullable": false},
+        {"name": "author_name", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": true},
+        {"name": "category_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "reason", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "request_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "handled_by", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "student_id", "references_table": "Student", "references_column": "student_id"},
+        {"column": "category_id", "references_table": "Category", "references_column": "category_id"},
+        {"column": "handled_by", "references_table": "Librarian", "references_column": "librarian_id"}
+      ],
+      "indexes": ["student_id", "status"]
+    },
+    "BookReview": {
+      "columns": [
+        {"name": "review_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "book_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "reviewer_type", "type": "TEXT", "pg_type": "VARCHAR(10)", "primary_key": false, "nullable": false},
+        {"name": "reviewer_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "rating", "type": "INTEGER", "pg_type": "SMALLINT", "primary_key": false, "nullable": true},
+        {"name": "review_text", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "review_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "helpful_count", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "book_id", "references_table": "Book", "references_column": "book_id"}
+      ],
+      "indexes": ["book_id", "rating"]
+    },
+    "Category": {
+      "columns": [
+        {"name": "category_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "description", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "dewey_decimal", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "parent_category_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "parent_category_id", "references_table": "Category", "references_column": "category_id"}
+      ],
+      "indexes": []
+    },
+    "Department": {
+      "columns": [
+        {"name": "department_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "name", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": false},
+        {"name": "building", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "floor", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "head_name", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": false},
+        {"name": "phone", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": true},
+        {"name": "established_year", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "DigitalAccess": {
+      "columns": [
+        {"name": "access_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "resource_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "student_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "access_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "duration_minutes", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "device_type", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "resource_id", "references_table": "DigitalResource", "references_column": "resource_id"},
+        {"column": "student_id", "references_table": "Student", "references_column": "student_id"}
+      ],
+      "indexes": ["student_id", "access_date"]
+    },
+    "DigitalResource": {
+      "columns": [
+        {"name": "resource_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "title", "type": "TEXT", "pg_type": "VARCHAR(500)", "primary_key": false, "nullable": false},
+        {"name": "resource_type", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": true},
+        {"name": "url", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "category_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "publisher_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "access_type", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "subscription_start", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true},
+        {"name": "subscription_expiry", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true},
+        {"name": "cost_per_year", "type": "REAL", "pg_type": "NUMERIC(10,2)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "category_id", "references_table": "Category", "references_column": "category_id"},
+        {"column": "publisher_id", "references_table": "Publisher", "references_column": "publisher_id"}
+      ],
+      "indexes": []
+    },
+    "EventRegistration": {
+      "columns": [
+        {"name": "reg_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "event_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "student_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "registration_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "attendance_status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "payment_status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "event_id", "references_table": "LibraryEvent", "references_column": "event_id"},
+        {"column": "student_id", "references_table": "Student", "references_column": "student_id"}
+      ],
+      "indexes": ["event_id", "student_id"]
+    },
+    "Faculty": {
+      "columns": [
+        {"name": "faculty_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "first_name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "last_name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": false},
+        {"name": "phone", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "department_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "designation", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true},
+        {"name": "employee_id", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": true},
+        {"name": "joining_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "department_id", "references_table": "Department", "references_column": "department_id"}
+      ],
+      "indexes": ["department_id", "email"]
+    },
+    "Fine": {
+      "columns": [
+        {"name": "fine_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "loan_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "fine_amount", "type": "REAL", "pg_type": "NUMERIC(10,2)", "primary_key": false, "nullable": false},
+        {"name": "reason", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": false},
+        {"name": "issued_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "paid_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true},
+        {"name": "status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "loan_id", "references_table": "Loan", "references_column": "loan_id"}
+      ],
+      "indexes": ["loan_id", "status"]
+    },
+    "Journal": {
+      "columns": [
+        {"name": "journal_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "title", "type": "TEXT", "pg_type": "VARCHAR(500)", "primary_key": false, "nullable": false},
+        {"name": "issn", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "publisher_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "category_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "frequency", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": true},
+        {"name": "impact_factor", "type": "REAL", "pg_type": "NUMERIC(5,3)", "primary_key": false, "nullable": true},
+        {"name": "available_issues", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "publisher_id", "references_table": "Publisher", "references_column": "publisher_id"},
+        {"column": "category_id", "references_table": "Category", "references_column": "category_id"}
+      ],
+      "indexes": []
+    },
+    "Librarian": {
+      "columns": [
+        {"name": "librarian_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "name", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": false},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": false},
+        {"name": "phone", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "role", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": false},
+        {"name": "shift", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "joining_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true},
+        {"name": "salary", "type": "REAL", "pg_type": "NUMERIC(10,2)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "LibraryEvent": {
+      "columns": [
+        {"name": "event_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "title", "type": "TEXT", "pg_type": "VARCHAR(500)", "primary_key": false, "nullable": false},
+        {"name": "description", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "event_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "event_time", "type": "TEXT", "pg_type": "TIME", "primary_key": false, "nullable": true},
+        {"name": "venue", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": true},
+        {"name": "organizer_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "department_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "capacity", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "fee", "type": "REAL", "pg_type": "NUMERIC(10,2)", "primary_key": false, "nullable": true},
+        {"name": "status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "organizer_id", "references_table": "Librarian", "references_column": "librarian_id"},
+        {"column": "department_id", "references_table": "Department", "references_column": "department_id"}
+      ],
+      "indexes": ["event_date"]
+    },
+    "Loan": {
+      "columns": [
+        {"name": "loan_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "book_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "borrower_type", "type": "TEXT", "pg_type": "VARCHAR(10)", "primary_key": false, "nullable": false},
+        {"name": "borrower_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "issue_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "due_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "return_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true},
+        {"name": "renewed_count", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "issued_by", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "book_id", "references_table": "Book", "references_column": "book_id"}
+      ],
+      "indexes": ["book_id", "borrower_id", "due_date", "return_date"]
+    },
+    "Publisher": {
+      "columns": [
+        {"name": "publisher_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "name", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": false},
+        {"name": "country", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "city", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "website", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": true},
+        {"name": "phone", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "established_year", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "PurchaseOrder": {
+      "columns": [
+        {"name": "po_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "supplier_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "order_date", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "expected_delivery", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true},
+        {"name": "status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "total_amount", "type": "REAL", "pg_type": "NUMERIC(12,2)", "primary_key": false, "nullable": true},
+        {"name": "ordered_by", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "supplier_id", "references_table": "Supplier", "references_column": "supplier_id"}
+      ],
+      "indexes": ["supplier_id", "status"]
+    },
+    "PurchaseOrderItem": {
+      "columns": [
+        {"name": "poi_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "po_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "book_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "quantity_ordered", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "unit_price", "type": "REAL", "pg_type": "NUMERIC(10,2)", "primary_key": false, "nullable": false},
+        {"name": "quantity_received", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "po_id", "references_table": "PurchaseOrder", "references_column": "po_id"},
+        {"column": "book_id", "references_table": "Book", "references_column": "book_id"}
+      ],
+      "indexes": ["po_id"]
+    },
+    "Reservation": {
+      "columns": [
+        {"name": "reservation_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "book_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "borrower_type", "type": "TEXT", "pg_type": "VARCHAR(10)", "primary_key": false, "nullable": false},
+        {"name": "borrower_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "reserved_on", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "expires_on", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": false},
+        {"name": "status", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "book_id", "references_table": "Book", "references_column": "book_id"}
+      ],
+      "indexes": ["book_id", "borrower_id", "status"]
+    },
+    "Shelf": {
+      "columns": [
+        {"name": "shelf_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "shelf_code", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": false},
+        {"name": "floor", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "section", "type": "TEXT", "pg_type": "VARCHAR(50)", "primary_key": false, "nullable": false},
+        {"name": "row_number", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "capacity", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": false},
+        {"name": "current_count", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "Student": {
+      "columns": [
+        {"name": "student_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "first_name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "last_name", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": false},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": false},
+        {"name": "phone", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "department_id", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "enrollment_year", "type": "INTEGER", "pg_type": "INTEGER", "primary_key": false, "nullable": true},
+        {"name": "program", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true},
+        {"name": "student_type", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "membership_expiry", "type": "TEXT", "pg_type": "DATE", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [
+        {"column": "department_id", "references_table": "Department", "references_column": "department_id"}
+      ],
+      "indexes": ["department_id", "email"]
+    },
+    "Supplier": {
+      "columns": [
+        {"name": "supplier_id", "type": "INTEGER", "pg_type": "SERIAL", "primary_key": true, "nullable": false},
+        {"name": "name", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": false},
+        {"name": "contact_person", "type": "TEXT", "pg_type": "VARCHAR(200)", "primary_key": false, "nullable": true},
+        {"name": "phone", "type": "TEXT", "pg_type": "VARCHAR(20)", "primary_key": false, "nullable": true},
+        {"name": "email", "type": "TEXT", "pg_type": "VARCHAR(255)", "primary_key": false, "nullable": true},
+        {"name": "address", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "city", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true},
+        {"name": "country", "type": "TEXT", "pg_type": "VARCHAR(100)", "primary_key": false, "nullable": true},
+        {"name": "rating", "type": "REAL", "pg_type": "NUMERIC(3,2)", "primary_key": false, "nullable": true}
+      ],
+      "foreign_keys": [],
+      "indexes": []
+    },
+    "QueryLog": {
+      "_note": "New table — tracks every NL-to-SQL request. Added as part of MCP implementation.",
+      "columns": [
+        {"name": "query_id", "type": "TEXT", "pg_type": "UUID DEFAULT gen_random_uuid()", "primary_key": true, "nullable": false},
+        {"name": "user_question", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": false},
+        {"name": "generated_sql", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "sql_execution_time", "type": "REAL", "pg_type": "FLOAT", "primary_key": false, "nullable": true},
+        {"name": "sql_success", "type": "INTEGER", "pg_type": "BOOLEAN", "primary_key": false, "nullable": false},
+        {"name": "error_message", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "response_text", "type": "TEXT", "pg_type": "TEXT", "primary_key": false, "nullable": true},
+        {"name": "created_at", "type": "TEXT", "pg_type": "TIMESTAMP DEFAULT NOW()", "primary_key": false, "nullable": false}
+      ],
+      "foreign_keys": [],
+      "indexes": ["created_at"]
+    }
+  }
+}
