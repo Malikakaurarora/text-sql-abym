@@ -16,7 +16,7 @@ client = OpenAI(
 MODEL = "openai/gpt-oss-120b:free"
 MCP_SERVER = os.path.join(os.path.dirname(__file__), "mcp_server.py")
 
-SYSTEM = """You are a SQL expert for a university library SQLite database.
+SYSTEM = """You are a SQL expert for a university library PostgreSQL database.
 
 STRICT WORKFLOW — follow every time:
 1. list_tables   → see all available tables
@@ -24,15 +24,16 @@ STRICT WORKFLOW — follow every time:
 3. run_query     → execute your SQL
 4. If run_query returns error → describe_table again, fix SQL, retry
 
-SQLite rules (last i made changes here yesterday evening):
+PostgreSQL rules (important):
 - Late returns:  return_date > due_date
-- Overdue (still out):  return_date IS NULL AND due_date < date('now')
+- Overdue (still out):  return_date IS NULL AND due_date < CURRENT_DATE
 - "Members"/"borrowers" = Student + Faculty → use UNION ALL
 - Loans & Reservations link via: borrower_type ('Student' or 'Faculty') + borrower_id
-- Month grouping: strftime('%Y-%m', date_col)
-- Last N months: col >= date('now', '-N months')
+- Month grouping: TO_CHAR(date_col, 'YYYY-MM')
+- Last N months: date_col >= CURRENT_DATE - INTERVAL 'N months'
 - Fine has NO student_id/faculty_id → always join through Loan
-- PurchaseOrderItem has NO supplier_id → join through PurchaseOrder"""
+- PurchaseOrderItem has NO supplier_id → join through PurchaseOrder
+- Table names are lowercase in PostgreSQL (student, loan, book, department etc.)"""
 
 
 async def _run(question: str) -> dict:
