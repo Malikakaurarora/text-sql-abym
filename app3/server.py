@@ -57,9 +57,15 @@ async def query(req: QueryRequest):
 
     qid = str(uuid.uuid4())
     t0 = time.perf_counter()
-    result = await _run(req.question)
-    exec_ms = round((time.perf_counter() - t0) * 1000, 2)
 
+    try:
+        result = await _run(req.question)
+    except Exception as e:
+        exec_ms = round((time.perf_counter() - t0) * 1000, 2)
+        save_log(qid, req.question, None, exec_ms, False, str(e), None)
+        return {"response": f"Error: {str(e)}", "sql": None, "execution_time": exec_ms, "query_id": qid}
+
+    exec_ms = round((time.perf_counter() - t0) * 1000, 2)
     ok = not result["answer"].startswith("Error:")
     save_log(qid, req.question, result.get("sql"), exec_ms, ok,
              result["answer"] if not ok else None,
