@@ -7,7 +7,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 SQLITE_PATH = os.path.join(os.path.dirname(__file__), '..', 'library2.db')
-
+#the postgree link is at notepad
 USE_POSTGRES = bool(DATABASE_URL and DATABASE_URL.startswith("postgresql"))
 
 if USE_POSTGRES:
@@ -44,7 +44,7 @@ def list_tables() -> str:
 
 @mcp.tool()
 def describe_table(table_name: str) -> str:
-    """Get exact column names and types for a table. Call before writing any SQL."""
+    """Get exact column names and types for a table. Call before writing any SQL)important mark."""
     conn = get_conn()
     cur = conn.cursor()
     if USE_POSTGRES:
