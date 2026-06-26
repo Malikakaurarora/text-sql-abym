@@ -1,6 +1,6 @@
 # Library Management System — NL to SQL Chatbot
 
-A university library management system with a Natural Language to SQL chatbot — built in 3 versions, each improving on the last. You can ask questions in plain English and it queries the database for you.
+A  library management system with a Natural Language to SQL chatbot — built in 3 versions, each improving on the last.
 
 Built entirely with free tools — no paid APIs needed (except app3 which uses a free tier).
 
