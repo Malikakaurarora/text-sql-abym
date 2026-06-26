@@ -24,7 +24,7 @@ STRICT WORKFLOW — follow every time:
 3. run_query     → execute your SQL
 4. If run_query returns error → describe_table again, fix SQL, retry
 
-SQLite rules (important):
+SQLite rules (last i made changes here yesterday evening):
 - Late returns:  return_date > due_date
 - Overdue (still out):  return_date IS NULL AND due_date < date('now')
 - "Members"/"borrowers" = Student + Faculty → use UNION ALL
@@ -113,7 +113,7 @@ def ask(question: str) -> dict:
     finally:
         loop.close()
 
-
+#reduced the description
 TABLE_DESCRIPTIONS = {
     "Department": "Academic departments",
     "Category": "Book categories and genres",
