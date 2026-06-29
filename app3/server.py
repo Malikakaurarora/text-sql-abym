@@ -60,10 +60,13 @@ async def query(req: QueryRequest):
 
     try:
         result = await _run(req.question)
-    except Exception as e:
+    except BaseException as e:
+        actual = e
+        while hasattr(actual, 'exceptions') and actual.exceptions:
+            actual = actual.exceptions[0]
         exec_ms = round((time.perf_counter() - t0) * 1000, 2)
-        save_log(qid, req.question, None, exec_ms, False, str(e), None)
-        return {"response": f"Error: {str(e)}", "sql": None, "execution_time": exec_ms, "query_id": qid}
+        save_log(qid, req.question, None, exec_ms, False, str(actual), None)
+        return {"response": f"Error: {str(actual)}", "sql": None, "execution_time": exec_ms, "query_id": qid}
 
     exec_ms = round((time.perf_counter() - t0) * 1000, 2)
     ok = not result["answer"].startswith("Error:")

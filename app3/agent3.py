@@ -10,33 +10,36 @@ from mcp.client.stdio import stdio_client, StdioServerParameters
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 client = OpenAI(
-    api_key=os.environ.get("OPENROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ.get("CEREBRAS_API_KEY"),
+    base_url="https://api.cerebras.ai/v1",
 )
-MODEL = "openai/gpt-oss-120b:free"
+MODEL = "gpt-oss-120b"
 MCP_SERVER = os.path.join(os.path.dirname(__file__), "mcp_server.py")
 
 SYSTEM = """You are a SQL expert for a university library PostgreSQL database.
 
-Available tables (all lowercase in PostgreSQL):
-student, faculty, department, book, author, bookauthor, publisher, category, shelf, journal,
-digitalresource, digitalaccess, loan, reservation, fine, bookreview, bookrequest,
-libraryevent, eventregistration, supplier, purchaseorder, purchaseorderitem, librarian, querylog
-
-WORKFLOW:
-1. call describe_table for every table you need — DO NOT call list_tables, you already have the list above
-2. run_query to execute your SQL
-3. if error → describe_table again, fix SQL, retry
+STRICT WORKFLOW — follow every time:
+1. list_tables   → see all available tables
+2. describe_table → check EXACT column names for every table you will use
+3. run_query     → execute your SQL
+4. If run_query returns error → describe_table again, fix SQL, retry
 
 PostgreSQL rules (important):
-- Late returns:  return_date > due_date
-- Overdue (still out):  return_date IS NULL AND due_date < CURRENT_DATE
-- "Members"/"borrowers" = student + faculty → use UNION ALL
-- loan and reservation link via: borrower_type ('Student' or 'Faculty') + borrower_id
+- Overdue (still out): return_date IS NULL AND due_date < CURRENT_DATE
+- Late returns: return_date > due_date
+- "Members"/"borrowers" = Student + Faculty → use UNION ALL
+- Loans & Reservations link via: borrower_type ('Student' or 'Faculty') + borrower_id
 - Month grouping: TO_CHAR(date_col, 'YYYY-MM')
-- Last N months: date_col >= CURRENT_DATE - INTERVAL 'N months'
-- fine has NO student_id/faculty_id → always join through loan
-- purchaseorderitem has NO supplier_id → join through purchaseorder"""
+- Last N months: col >= CURRENT_DATE - INTERVAL 'N months'
+- Fine has NO student_id/faculty_id → always join through Loan
+- PurchaseOrderItem has NO supplier_id → join through PurchaseOrder
+
+Exact status values (case-sensitive):
+- fine.status: 'Paid', 'Unpaid', 'Waived'
+- loan.borrower_type: 'Student', 'Faculty'
+- reservation.status: 'Active', 'Fulfilled', 'Expired'
+- bookrequest.status: 'Pending', 'Approved', 'Rejected'
+- purchaseorder.status: 'Pending', 'Delivered', 'Cancelled'"""
 
 
 async def _run(question: str) -> dict:
@@ -46,7 +49,6 @@ async def _run(question: str) -> dict:
         async with ClientSession(read, write) as session:
             await session.initialize()
 
-            # Discover tools from MCP server at runtime
             tool_list = await session.list_tools()
             tools = [
                 {
@@ -69,7 +71,8 @@ async def _run(question: str) -> dict:
             last_sql = None
 
             for _ in range(15):
-                resp = client.chat.completions.create(
+                resp = await asyncio.to_thread(
+                    client.chat.completions.create,
                     model=MODEL,
                     messages=messages,
                     tools=tools,
@@ -117,7 +120,7 @@ def ask(question: str) -> dict:
     finally:
         loop.close()
 
-#reduced the description
+
 TABLE_DESCRIPTIONS = {
     "Department": "Academic departments",
     "Category": "Book categories and genres",

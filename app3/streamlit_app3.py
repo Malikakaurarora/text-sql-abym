@@ -89,7 +89,7 @@ if submitted and user_input.strip():
                     resp = requests.post(
                         f"{SERVER_URL}/query",
                         json={"question": question},
-                        timeout=120,
+                        timeout=300,
                     )
                     resp.raise_for_status()
                     data = resp.json()
