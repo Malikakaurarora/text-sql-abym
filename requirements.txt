@@ -12,7 +12,7 @@ torch==2.0.1+cpu
 numpy==1.26.4
 transformers==4.46.3
 
-# ── app3/ — MCP implementation + FastAPI server (needs Python 3.11) ─────────
+# ── app3/ — MCP + FastAPI server + PostgreSQL (Python 3.11+) ─────────────────
 openai
 mcp
 fastapi
