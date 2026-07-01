@@ -9,11 +9,13 @@ from mcp.client.stdio import stdio_client, StdioServerParameters
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-client = OpenAI(
-    api_key=os.environ.get("CEREBRAS_API_KEY"),
-    base_url="https://api.cerebras.ai/v1",
-)
-MODEL = "gpt-oss-120b"
+_cerebras = OpenAI(api_key=os.environ.get("CEREBRAS_API_KEY"), base_url="https://api.cerebras.ai/v1")
+_openrouter = OpenAI(api_key=os.environ.get("OPENROUTER_API_KEY"), base_url="https://openrouter.ai/api/v1")
+
+PROVIDERS = [
+    {"client": _cerebras,   "model": "gpt-oss-120b",            "name": "Cerebras"},
+    {"client": _openrouter, "model": "openai/gpt-oss-120b:free", "name": "OpenRouter"},
+]
 MCP_SERVER = os.path.join(os.path.dirname(__file__), "mcp_server.py")
 
 SYSTEM = """You are a SQL expert for a university library PostgreSQL database.
@@ -71,14 +73,39 @@ async def _run(question: str) -> dict:
             last_sql = None
 
             for _ in range(15):
-                resp = await asyncio.to_thread(
-                    client.chat.completions.create,
-                    model=MODEL,
-                    messages=messages,
-                    tools=tools,
-                )
+                resp = None
+                for p in PROVIDERS:
+                    try:
+                        resp = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                p["client"].chat.completions.create,
+                                model=p["model"],
+                                messages=messages,
+                                tools=tools,
+                            ),
+                            timeout=20,
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        await asyncio.sleep(2)
+                        continue
+                    except Exception as e:
+                        err = str(e).lower()
+                        if any(x in err for x in ["429", "rate", "quota", "traffic", "timeout"]):
+                            await asyncio.sleep(2)
+                            continue
+                        raise
+                if resp is None:
+                    await asyncio.sleep(5)
+                    continue
                 msg = resp.choices[0].message
-                messages.append(msg)
+                msg_dict = {"role": msg.role, "content": msg.content}
+                if msg.tool_calls:
+                    msg_dict["tool_calls"] = [
+                        {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                        for tc in msg.tool_calls
+                    ]
+                messages.append(msg_dict)
 
                 if not msg.tool_calls:
                     return {"answer": msg.content or "No answer.", "sql": last_sql}
